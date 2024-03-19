@@ -58,27 +58,22 @@ class SHAPAnalysis:
         shap_abs = np.abs(shap_values)
         shap_mask = shap_abs > shap_threshold
         shap_df = pd.DataFrame(shap_values[shap_mask], index=single_observation_df.columns[shap_mask], columns=['SHAP Value'])
-        
-        # Supprimer les variables avec des valeurs nulles dans single_observation_df
-        # Vérifier si les colonnes existent dans shap_df avant de filtrer
+    
         null_cols_to_drop = [col for col in single_observation_df.columns if col in shap_df.index and single_observation_df[col].values[0] == 0]
         shap_df = shap_df.drop(null_cols_to_drop, axis=0)
-
-        # Supprimer les variables se terminant par "_nan"
+    
         nan_cols_to_drop = [col for col in shap_df.index if col.endswith('_nan')]
         shap_df = shap_df.drop(nan_cols_to_drop)
-
+    
         if not shap_df.empty:
-            # Trier le DataFrame par 'SHAP Value' en ordre décroissant d'importance
-            shap_df = shap_df.sort_values(by='SHAP Value', ascending=False)  # Ajout de cette ligne pour trier
+            shap_df = shap_df.sort_values(by='SHAP Value', ascending=False)
     
             fig, ax = plt.subplots(figsize=(16, 9))
             colors = ['green' if val < 0 else 'red' for val in shap_df['SHAP Value']]
             bars = shap_df['SHAP Value'].plot(kind='barh', color=colors, ax=ax)
             ax.axvline(x=0, color='black', linestyle='--')
     
-            # Ajouter les valeurs réelles des variables sur les barres
-            for bar, col_name in zip(bars.patches, shap_df.index):  # Mise à jour pour utiliser shap_df.index
+            for bar, col_name in zip(bars.patches, shap_df.index):
                 value = single_observation_df[col_name].values[0]
                 if value == 0 or value == 1:
                     bar_width = bar.get_width()
@@ -86,33 +81,31 @@ class SHAPAnalysis:
                     ax.text(bar_width / 2, bar.get_y() + bar_height / 2, f'{int(value)}', 
                             ha='center', va='center', color='white' if bar_width < 0 else 'black')
     
-            # Étiquette pour indiquer si la demande de crédit a été acceptée ou refusée
-            risk_label = "Votre demande de crédit a été refusée" if predicted_class[0] == 1 else "Votre demande de crédit a été acceptée"
-            
-            # Étiquette pour indiquer la probabilité estimée de ne pas rembourser le crédit
-            proba_label = f"Risque estimé de non-remboursement : {predicted_proba[0][int(predicted_class[0])]:.0%}"
-            
-            # Étiquette pour indiquer le seuil de risque à partir duquel une demande de crédit est acceptée ou refusée
-            threshold_label = f"Limite de risque pour l'acceptation : {self.custom_model.threshold:.0%}"
-            
-            # Mise à jour du titre pour inclure les étiquettes reformulées
-            plt.title(f'{risk_label}\n{proba_label}\n{threshold_label}\nImportance des critères (Impact significatif > {shap_threshold})')
-            
-            # Modification de l'étiquette de l'axe des abscisses pour être moins technique
-            plt.xlabel('Impact sur la décision')
-
-
+            decision_info = f'Décision de la demande de prêt : {"Refusée" if predicted_class[0] == 1 else "Acceptée"}'
+            proba_info = f'Probabilité de non-remboursement : {predicted_proba[0][1]:.2f}'
+            threshold_info = f'Seuil de décision : {self.custom_model.threshold:.2f}'
     
-            # Ajout d'une marge à gauche de la figure
+            ax.text(0.5, 1.1, f'{decision_info}\n{proba_info}\n{threshold_info}', horizontalalignment='center', verticalalignment='center', transform=ax.transAxes, bbox=dict(facecolor='none', edgecolor='black', boxstyle='round,pad=1'))
+    
+            # Justification de la décision sous forme de ligne horizontale
+            threshold_x = self.custom_model.threshold * 100  # Conversion en pourcentage
+            proba_x = predicted_proba[0][1] * 100  # Probabilité de défaut en pourcentage
+            
+    
+            ax.set_yticks(range(-2, len(shap_df) + 2))
+            ax.set_yticklabels(['', '', *shap_df.index, '', ''])
+            ax.set_ylim(-3, len(shap_df.index))
+    
+            ax.set_xlabel('Impact sur la décision')
+    
             plt.subplots_adjust(left=0.3)
     
-            # Enregistrement du graphique dans un fichier avec l'identifiant du client dans le nom
-            image_directory = os.path.join(app.root_path, 'static', 'images')  # Chemin vers le dossier images statiques
+            image_directory = os.path.join(app.root_path, 'static', 'images')
             os.makedirs(image_directory, exist_ok=True)
             image_path = os.path.join(image_directory, f'shap_plot_SK_ID_CURR_{sk_id_curr}.png')
             plt.savefig(image_path)
-            plt.close(fig)  # Fermer la figure pour libérer la mémoire
-            # Retourner le chemin d'accès à l'image
+            plt.close(fig)
+    
             relative_image_path = f'shap_plot_SK_ID_CURR_{sk_id_curr}.png'
     
             return relative_image_path
@@ -120,6 +113,8 @@ class SHAPAnalysis:
             print("Aucune caractéristique avec une importance non nulle pour cette observation.")
             return None
 
+
+    
 
 # # SECTION 3: CHARGEMENT DU MODÈLE ET CONFIGURATION
 
@@ -217,7 +212,9 @@ from flask import Flask, jsonify, request, render_template
 from flask_cors import CORS
 import pandas as pd
 import os
-
+import numpy as np
+import pandas as pd
+import os
 # Initialisation de l'application Flask
 app = Flask(__name__)
 
@@ -234,8 +231,8 @@ def index():
     # Route principale qui retourne la page HTML pour l'interface utilisateur
     return render_template('index.html')
 
-# Endpoint pour récupérer les données d'un client par son SK_ID_CURR
 @app.route('/api/data/<int:sk_id>', methods=['GET'])
+
 def get_data(sk_id):
 
     # Définir les variables à transmettre
@@ -266,20 +263,38 @@ def get_data(sk_id):
     'FLAG_EMAIL']
     for var in categorical_variables:
         unique_values[var] = data[var].unique().tolist()
-    
+
+    # Récupérer les valeurs extrêmes et la moyenne des variables numériques
+    extreme_values = {}
+    numerical_variables = ['AMT_INCOME_TOTAL', 'AMT_CREDIT', 'AMT_ANNUITY', 'AMT_GOODS_PRICE']
+    for var in numerical_variables:
+        extreme_values[var] = {
+            'min': np.min(data[var]),
+            'max': np.max(data[var]),
+            'mean': np.mean(data[var])
+        }
+        
+        # Vérifier s'il y a des valeurs extrêmes trouvées
+        if np.isnan(extreme_values[var]['min']) or np.isnan(extreme_values[var]['max']):
+            print(f"Aucune valeur extrême trouvée pour la variable {var}")
+
     if client_data:
         # Sélectionner uniquement les variables nécessaires
         selected_data = {var: client_data[0][var] for var in variables_to_display}
         # Ajouter les valeurs uniques pour les variables catégorielles
         selected_data['unique_values'] = unique_values
+        # Ajouter les valeurs extrêmes pour les variables numériques
+        selected_data['extreme_values'] = extreme_values
         return jsonify(selected_data)
     else:
         return jsonify({"error": "Client not found"}), 404
-        
 
+
+        
+# Route pour générer le plot SHAP pour une observation spécifique via une requête GET.
 @app.route('/generate_shap_plot', methods=['GET'])
 def generate_shap_plot():
-    # Route pour générer le plot SHAP pour une observation spécifique via une requête GET.
+    
     
     # Récupération de l'identifiant SK_ID_CURR à partir des paramètres de la requête.
     sk_id_curr = request.args.get('SK_ID_CURR')
