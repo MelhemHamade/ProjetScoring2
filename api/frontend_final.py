@@ -27,7 +27,7 @@ def navbar():
             shap_data = generate_shap_analysis(sk_id)
             if shap_data is not None:
                 st.error('Erreur: Impossible de générer l\'analyse SHAP.')
-                
+                st.error(shap_data)
 
     elif page == "Comparaison de valeurs":
         st.title("Comparaison de valeurs")
@@ -103,7 +103,54 @@ def unique_sorted_values_plus_ALL(array):
 
 # Fonction pour afficher les données du client et permettre la modification
 def display_client_data(client_data, unique_values, extreme_values, sk_id):
-    st.write("Informations du client :")
+    # CSS pour augmenter le contraste et la visibilité des champs de saisie
+    contrast_style = """
+    <style>
+    /* Augmentation du contraste pour les champs de saisie et select */
+    .stTextInput input, .stSelectbox select, .stSlider .thumb, .stSlider .track {
+        border: 2px solid #4f4f4f !important; /* Bordure plus visible */
+        background-color: #ffffff !important; /* Fond blanc pour éviter la transparence */
+    }
+    
+    /* Styles supplémentaires pour d'autres types de widgets si nécessaire */
+    .stDateInput input, .stTimeInput input, .stNumberInput input, .stTextarea textarea {
+        border: 2px solid #4f4f4f !important; /* Assurez-vous que cela s'applique aux types de champs supplémentaires */
+        background-color: #ffffff !important;
+    }
+    
+    /* Amélioration du contraste pour le slider */
+    .stSlider .slider-horizontal {
+        background-color: #4f4f4f !important; /* Couleur de fond du slider */
+    }
+    .stSlider .slider-handle {
+        border: 2px solid #4f4f4f !important; /* Bordure du handle du slider */
+    }
+    
+    /* Styliser le bouton de soumission */
+    .stButton > button {
+        border: 2px solid #4f4f4f !important; /* Bordure du bouton */
+        background-color: #4a86e8 !important; /* Couleur de fond bleue */
+        color: white !important; /* Couleur du texte */
+        font-size: 16px !important; /* Taille de la police */
+        padding: 10px 24px !important; /* Padding intérieur */
+        border-radius: 5px !important; /* Bordures arrondies */
+    }
+    
+   
+    .stButton > button:hover {
+        background-color: #357abD !important; /* Couleur de fond plus foncée au survol */
+    }
+    
+    .stButton > button:active {
+        background-color: #22497c !important; /* Couleur de fond lors du clic */
+    }
+    </style>
+    """
+    
+    st.markdown(contrast_style, unsafe_allow_html=True)
+    
+
+    st.write("### Informations du client :")
     
     # Déclarer le formulaire
     with st.form(key='client_data_form'):
@@ -153,7 +200,6 @@ def display_client_data(client_data, unique_values, extreme_values, sk_id):
 
     # Retourner les données du client mises à jour
     return client_data
-
                     
 # Fonction pour envoyer les nouvelles valeurs au backend
 def send_new_values(client_data, sk_id):
