@@ -114,7 +114,7 @@ def display_client_data(client_data, unique_values, extreme_values, sk_id):
     
     /* Styles supplémentaires pour d'autres types de widgets si nécessaire */
     .stDateInput input, .stTimeInput input, .stNumberInput input, .stTextarea textarea {
-        border: 2px solid #4f4f4f !important; /* Assurez-vous que cela s'applique aux types de champs supplémentaires */
+        border: 2px solid #4f4f4f !important;
         background-color: #ffffff !important;
     }
     
