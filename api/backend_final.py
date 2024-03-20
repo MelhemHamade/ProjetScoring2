@@ -20,7 +20,13 @@ from joblib import load
 import pickle
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
-
+from flask import Flask, jsonify, request, render_template
+from flask_cors import CORS
+import pandas as pd
+import os
+import numpy as np
+import pandas as pd
+import seaborn as sns
 # Ajout du chemin du dossier src pour l'importation des modules personnalisés.
 sys.path.insert(0, '../src')
 from TestCleaning import TestCleaningPipeline
@@ -73,13 +79,15 @@ class SHAPAnalysis:
             bars = shap_df['SHAP Value'].plot(kind='barh', color=colors, ax=ax)
             ax.axvline(x=0, color='black', linestyle='--')
     
-            for bar, col_name in zip(bars.patches, shap_df.index):
-                value = single_observation_df[col_name].values[0]
-                if value == 0 or value == 1:
-                    bar_width = bar.get_width()
-                    bar_height = bar.get_height()
-                    ax.text(bar_width / 2, bar.get_y() + bar_height / 2, f'{int(value)}', 
-                            ha='center', va='center', color='white' if bar_width < 0 else 'black')
+            for bar, col_name, value in zip(bars.patches, shap_df.index, shap_df['SHAP Value']):
+                if value < 0:
+                    text_color = 'green'
+                else:
+                    text_color = 'red'
+                bar_width = bar.get_width()
+                bar_height = bar.get_height()
+                ax.text(bar_width / 2, bar.get_y() + bar_height / 2, f'{int(value)}', 
+                        ha='center', va='center', color=text_color)
     
             decision_info = f'Décision de la demande de prêt : {"Refusée" if predicted_class[0] == 1 else "Acceptée"}'
             proba_info = f'Probabilité de non-remboursement : {predicted_proba[0][1]:.2f}'
@@ -90,7 +98,7 @@ class SHAPAnalysis:
             # Justification de la décision sous forme de ligne horizontale
             threshold_x = self.custom_model.threshold * 100  # Conversion en pourcentage
             proba_x = predicted_proba[0][1] * 100  # Probabilité de défaut en pourcentage
-            
+    
     
             ax.set_yticks(range(-2, len(shap_df) + 2))
             ax.set_yticklabels(['', '', *shap_df.index, '', ''])
@@ -113,8 +121,7 @@ class SHAPAnalysis:
             print("Aucune caractéristique avec une importance non nulle pour cette observation.")
             return None
 
-
-    
+ 
 
 # # SECTION 3: CHARGEMENT DU MODÈLE ET CONFIGURATION
 
@@ -201,28 +208,43 @@ def reorder_dataframe_columns(dataframe, model, id_column='SK_ID_CURR'):
     return reordered_dataframe
 
 
-# # SECTION 4: CONFIGURATION DE L'APPLICATION FLASK
+def bivariate_analysis(selected_variables, data):
+    # Vérifier que les variables sélectionnées sont valides
+    if len(selected_variables) == 2:
+        # Créer une sous-trame avec les deux variables sélectionnées
+        selected_data = data[selected_variables]
+        
+        # Générer l'analyse bivariée avec un seul graphique
+        plt.figure(figsize=(8, 6))
+        sns.scatterplot(data=selected_data, x=selected_variables[0], y=selected_variables[1])
+        plt.xlabel(selected_variables[0])
+        plt.ylabel(selected_variables[1])
+        plt.title('Analyse Bivariée')
+        
+        # Enregistrer le graphique dans un fichier
+        image_directory = os.path.join(app.root_path, 'static', 'images')
+        os.makedirs(image_directory, exist_ok=True)
+        image_path = os.path.join(image_directory, 'bivariate_analysis.png')
+        plt.savefig(image_path)
+        
+        # Fermer la figure
+        plt.close()
+        
+        return image_path
+    else:
+        return None
 
-# In[6]:
 
-
-
-
-from flask import Flask, jsonify, request, render_template
-from flask_cors import CORS
-import pandas as pd
-import os
-import numpy as np
-import pandas as pd
-import os
 # Initialisation de l'application Flask
 app = Flask(__name__)
 
 # Activation des Cross-Origin Resource Sharing (CORS) pour l'application Flask
 CORS(app)
 
-# Chemin vers le dossier de données et modèle (adaptez selon votre structure de fichiers)
+# Chemin vers le dossier de données et modèle (adaptez selon structure de fichiers)
 data_path = os.path.join(os.path.dirname(__file__), '..', 'data', 'test_merged.csv')
+
+# Charger les données depuis le fichier CSV une seule fois au démarrage de l'application
 data = pd.read_csv(data_path)
 
 
@@ -232,7 +254,6 @@ def index():
     return render_template('index.html')
 
 @app.route('/api/data/<int:sk_id>', methods=['GET'])
-
 def get_data(sk_id):
 
     # Définir les variables à transmettre
@@ -250,11 +271,8 @@ def get_data(sk_id):
         'YEARS_EMPLOYED',
         'FLAG_MOBIL',
         'FLAG_EMAIL']
-    
-    # Charger les données depuis le fichier CSV
-    data_path = os.path.join(os.path.dirname(__file__),'..', 'data', 'test_merged.csv')
-    data = pd.read_csv(data_path)
 
+    # Sélectionner l'observation selon son id
     client_data = data[data['SK_ID_CURR'] == sk_id].to_dict(orient='records')
     unique_values = {}
     
@@ -312,7 +330,7 @@ def generate_shap_plot():
         return jsonify({"error": "Le paramètre SK_ID_CURR doit être un entier valide."}), 400
 
     # Recherche des données du client correspondant à l'identifiant SK_ID_CURR dans le dataset préchargé.
-    client_data = test_merged[test_merged['SK_ID_CURR'] == sk_id_curr]
+    client_data = data[data['SK_ID_CURR'] == sk_id_curr]
     
     # Vérifie si des données pour le client spécifié ont été trouvées.
     if client_data.empty:
@@ -337,6 +355,53 @@ def generate_shap_plot():
 
     # Si le graphique est généré avec succès, renvoie le chemin d'accès au fichier image du graphique.
     return jsonify({"shap_plot_path": shap_plot_path})
+
+
+@app.route('/api/bivariate_analysis', methods=['POST'])
+def calculate_bivariate_analysis():
+    request_data = request.get_json()
+    selected_variables = request_data['selected_variables']
+    bivariate_plot_path = bivariate_analysis(selected_variables, data)
+    print(f"le chemin bivariate_plot_path est : {bivariate_plot_path }")
+    if bivariate_plot_path:
+        # Retourner le chemin de l'image
+        return jsonify({'bivariate_analysis_path': bivariate_plot_path})
+    else:
+        return jsonify({'error': 'Variables invalides'})
+
+# La route Flask pour la mise à jour des données et la génération de l'analyse SHAP
+
+
+@app.route('/api/update', methods=['POST'])
+def update_data():
+    # Recevoir les données du client depuis la requête POST
+    updated_client_data = request.get_json()
+    print(f"updated_client_data est : {updated_client_data}")
+    
+    # Vérification que les données reçues ne sont pas nulles
+    if not updated_client_data:
+        return jsonify({"error": "Aucune donnée reçue pour la mise à jour."}), 400
+
+    # Convertir SK_ID_CURR en entier
+    updated_client_data['SK_ID_CURR'] = int(updated_client_data['SK_ID_CURR'])
+
+    # Convertir les données reçues en DataFrame
+    client_data_df = pd.DataFrame.from_records([updated_client_data])
+
+    # Afficher le DataFrame
+    print(f"voilà le resultat client_data_df: {client_data_df.head()}")
+
+    # Extraire l'identifiant du client
+    sk_id_curr = updated_client_data['SK_ID_CURR']
+
+    # Mettre à jour uniquement les colonnes existantes dans les données globales
+    global data
+    data.loc[data['SK_ID_CURR'] == sk_id_curr, client_data_df.columns] = client_data_df.values
+
+    # Renvoyer la réponse
+    return jsonify({"message": "Mise à jour réussie."})
+
+
 
 if __name__ == '__main__':
     app.run(debug=True)
