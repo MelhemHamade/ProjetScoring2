@@ -204,7 +204,7 @@ def display_client_data(client_data, unique_values, extreme_values, sk_id):
 # Fonction pour envoyer les nouvelles valeurs au backend
 def send_new_values(client_data, sk_id):
     client_data['SK_ID_CURR'] = sk_id  # Ajouter l'ID du client aux données
-    response = requests.post('http://localhost:5000/api/update', json=client_data)
+    response = requests.post('http://melhemhamade.pythonanywhere.com/api/update', json=client_data)
     if response.status_code != 200:
         st.error("Une erreur s'est produite lors de la mise à jour des valeurs.")
 
@@ -284,13 +284,15 @@ def compare_to_stats(client_data, extreme_values):
 
 def bivariate_analysis(selected_variables):
     # Envoyer uniquement les deux variables sélectionnées au backend
-    response = requests.post('http://localhost:5000/api/bivariate_analysis', json={'selected_variables': selected_variables})
+    response = requests.post('http://melhemhamade.pythonanywhere.com/api/bivariate_analysis', json={'selected_variables': selected_variables})
     if response.status_code == 200:
         # Récupérer le chemin de l'image de la réponse JSON
         bivariate_plot_path = response.json().get('bivariate_analysis_path')
         if bivariate_plot_path:
+            # URL complète de l'image
+            image_url = "https://melhemhamade.pythonanywhere.com/static/images/bivariate_analysis.png"
             # Afficher l'image dans Streamlit
-            st.image(bivariate_plot_path, caption='Analyse Bivariée')
+            st.image(image_url, caption='Analyse Bivariée')
         else:
             st.error("Erreur: Impossible de récupérer l'analyse bivariée.")
     else:
